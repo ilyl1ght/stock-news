@@ -1,6 +1,7 @@
 import { getQuoteCached, getCompanyNewsCached, getDailyCandlesCached } from '../providers/cachedAccess';
 import { scoreSentiment } from './sentiment';
 import { AnalysisComponent, AnalysisResult, Confidence, Signal } from '../types';
+import { withCache, TTL } from '../utils/cache';
 
 // The analysis engine: a transparent, weighted scoring system. Every
 // component below is derived from real fetched data (news actually
@@ -216,4 +217,14 @@ export async function analyzeStock(symbol: string): Promise<AnalysisResult> {
     },
     generatedAt: Date.now(),
   };
+}
+
+/**
+ * Same as analyzeStock, but shares one result across every caller within
+ * the TTL window (the per-symbol API route, the watchlist batch endpoint,
+ * and the background monitor all ask "what's the current analysis?"
+ * independently and often within moments of each other).
+ */
+export function analyzeStockCached(symbol: string): Promise<AnalysisResult> {
+  return withCache(`analysis:${symbol}`, TTL.ANALYSIS, () => analyzeStock(symbol));
 }

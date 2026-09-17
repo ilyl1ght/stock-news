@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getQuoteCached, getProfileCached, getDailyCandlesCached, getCompanyNewsCached } from '../providers/cachedAccess';
-import { analyzeStock } from '../analysis/engine';
+import { analyzeStockCached } from '../analysis/engine';
 import { enrichArticles } from '../analysis/newsEnrichment';
 import { isValidSymbol, normalizeSymbol, sanitizeSymbolList } from '../utils/validate';
 import { isFinnhubConfigured } from '../config';
@@ -64,7 +64,7 @@ async function getAnalysisOrFallback(symbol: string): Promise<AnalysisResult & {
     return { symbol, ...FALLBACK_ANALYSIS, generatedAt: Date.now(), unavailable: 'provider_not_configured' };
   }
   try {
-    const result = await analyzeStock(symbol);
+    const result = await analyzeStockCached(symbol);
     return { ...result, unavailable: null };
   } catch {
     return { symbol, ...FALLBACK_ANALYSIS, generatedAt: Date.now(), unavailable: 'provider_error' };
