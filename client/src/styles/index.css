@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-bg text-text antialiased;
+    font-feature-settings: 'tnum' 1;
+  }
+  ::selection {
+    background-color: rgba(242, 242, 243, 0.15);
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-border px-4 py-2.5 text-sm font-medium transition-colors duration-150;
+  }
+  .btn-primary {
+    @apply btn bg-text text-bg hover:bg-white border-transparent;
+  }
+  .btn-secondary {
+    @apply btn bg-panel text-text hover:bg-panelhover;
+  }
+  .btn-ghost {
+    @apply btn border-transparent bg-transparent text-muted hover:text-text hover:bg-panel;
+  }
+  .panel {
+    @apply bg-panel border border-border rounded-md;
+  }
+  .input {
+    @apply w-full rounded-md border border-border bg-panel px-3.5 py-2.5 text-sm text-text placeholder:text-faint outline-none transition-colors focus:border-borderlight;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-sm px-2 py-0.5 text-xs font-semibold tracking-wide;
+  }
+  .badge-bullish {
+    @apply badge bg-green-bg text-green;
+  }
+  .badge-bearish {
+    @apply badge bg-red-bg text-red;
+  }
+  .badge-neutral {
+    @apply badge bg-gray-bg text-gray;
+  }
+  .nav-link {
+    @apply text-sm font-medium text-muted hover:text-text transition-colors px-1 py-1;
+  }
+  .nav-link-active {
+    @apply text-text;
+  }
+}
+
+/* Minimal, unobtrusive scrollbar that fits the dark theme. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #26262b;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #323238;
+}
