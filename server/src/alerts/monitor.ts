@@ -1,5 +1,5 @@
 import { getWatchlistSymbols } from '../watchlistStore/store';
-import { analyzeStock } from '../analysis/engine';
+import { analyzeStockCached } from '../analysis/engine';
 import { getCompanyNewsCached, getProfileCached, getQuoteCached } from '../providers/cachedAccess';
 import { scoreSentiment } from '../analysis/sentiment';
 import {
@@ -51,7 +51,7 @@ async function maybeSendDiscord(event: WatchlistEvent, type: AlertType): Promise
 }
 
 async function checkSignalChange(symbol: string, companyName: string | undefined): Promise<void> {
-  const analysis = await analyzeStock(symbol);
+  const analysis = await analyzeStockCached(symbol);
   if (analysis.signal === 'NOT_ENOUGH_INFO') return;
 
   const previous = getLastSignal(symbol);

@@ -1,12 +1,18 @@
+import { useMemo } from 'react';
 import { useWatchlist } from '../context/WatchlistContext';
-import { useWatchlistAnalyses, useWatchlistQuotes } from '../api/hooks';
+import { useWatchlistBatch, WatchlistBatchEntry } from '../api/hooks';
 import { SearchBar } from '../components/SearchBar';
 import { StockRow } from '../components/StockRow';
 
 export function Watchlist() {
   const { stocks, symbols, removeStock, isReady } = useWatchlist();
-  const quotesQuery = useWatchlistQuotes(symbols);
-  const analysesQuery = useWatchlistAnalyses(symbols);
+  const batchQuery = useWatchlistBatch(symbols);
+
+  const bySymbol = useMemo(() => {
+    const map = new Map<string, WatchlistBatchEntry>();
+    for (const entry of batchQuery.data?.results || []) map.set(entry.symbol, entry);
+    return map;
+  }, [batchQuery.data]);
 
   return (
     <div>
@@ -25,18 +31,17 @@ export function Watchlist() {
           </div>
         ) : (
           <div className="panel divide-y divide-border">
-            {stocks.map((stock, i) => {
-              const quoteEntry = quotesQuery.data?.[i];
-              const analysisEntry = analysesQuery.data?.[i];
+            {stocks.map((stock) => {
+              const entry = bySymbol.get(stock.symbol);
               return (
                 <StockRow
                   key={stock.symbol}
                   symbol={stock.symbol}
                   name={stock.name}
-                  quote={quoteEntry?.quote}
-                  signal={analysisEntry?.signal}
-                  loading={quotesQuery.isLoading || analysesQuery.isLoading}
-                  unavailable={quoteEntry?.unavailable}
+                  quote={entry?.quote}
+                  signal={entry?.analysis?.signal}
+                  loading={batchQuery.isLoading}
+                  unavailable={entry?.unavailable}
                   onRemove={() => removeStock(stock.symbol)}
                 />
               );

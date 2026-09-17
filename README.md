@@ -224,6 +224,17 @@ requests). Any Node host works: a small VPS, Render, Railway, Fly.io, etc.
    watchlist mirror, settings, and alert history - make sure it's on
    persistent storage (not wiped on every deploy) if you want alert history
    and Discord settings to survive restarts. It's created automatically.
+6. If you're behind a reverse proxy (Render, Railway, Fly.io, nginx, etc. -
+   true for most hosts), every visitor's request arrives from the proxy's
+   internal address, so Express's default `req.ip` can't tell them apart and
+   the built-in rate limiter (`server/src/utils/rateLimit.ts`) ends up
+   sharing one bucket across all visitors instead of one per real client.
+   This is a usability nuance, not a security hole - it just makes the
+   limiter more conservative than intended. To restore accurate per-visitor
+   limits, add `app.set('trust proxy', 1)` in `server/src/index.ts` (or the
+   correct hop count for your setup) - only do this when you know the
+   request really passes through a trusted proxy, since trusting it
+   blindly lets a client fake its own IP via the `X-Forwarded-For` header.
 
 ## 11. Known limitations (by design)
 

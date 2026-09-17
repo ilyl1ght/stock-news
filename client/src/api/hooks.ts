@@ -73,26 +73,20 @@ export function useStock(symbol: string | undefined) {
   });
 }
 
-export function useWatchlistQuotes(symbols: string[]) {
-  return useQuery({
-    queryKey: ['watchlist-quotes', symbols.join(',')],
-    queryFn: async () => {
-      const results = await Promise.all(symbols.map((s) => api.get<StockResponse>(`/stocks/${s}`)));
-      return results;
-    },
-    enabled: symbols.length > 0,
-    refetchInterval: 60_000,
-    staleTime: 30_000,
-  });
+export interface WatchlistBatchEntry extends StockResponse {
+  analysis: AnalysisResult;
 }
 
-export function useWatchlistAnalyses(symbols: string[]) {
+/**
+ * One request covering the whole watchlist (quote + profile + analysis per
+ * symbol) instead of 2×N separate requests - keeps a larger watchlist well
+ * within the API rate limiter as it polls.
+ */
+export function useWatchlistBatch(symbols: string[]) {
+  const symbolsKey = symbols.join(',');
   return useQuery({
-    queryKey: ['watchlist-analyses', symbols.join(',')],
-    queryFn: async () => {
-      const results = await Promise.all(symbols.map((s) => api.get<AnalysisResult>(`/stocks/${s}/analysis`)));
-      return results;
-    },
+    queryKey: ['watchlist-batch', symbolsKey],
+    queryFn: () => api.get<{ results: WatchlistBatchEntry[] }>(`/stocks/batch?symbols=${encodeURIComponent(symbolsKey)}`),
     enabled: symbols.length > 0,
     refetchInterval: 60_000,
     staleTime: 30_000,
