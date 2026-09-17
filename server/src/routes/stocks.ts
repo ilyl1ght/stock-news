@@ -2,9 +2,10 @@ import { Router } from 'express';
 import { getQuoteCached, getProfileCached, getDailyCandlesCached, getCompanyNewsCached } from '../providers/cachedAccess';
 import { analyzeStock } from '../analysis/engine';
 import { enrichArticles } from '../analysis/newsEnrichment';
-import { isValidSymbol, normalizeSymbol } from '../utils/validate';
+import { isValidSymbol, normalizeSymbol, sanitizeSymbolList } from '../utils/validate';
 import { isFinnhubConfigured } from '../config';
 import { getAllStatuses } from '../providers';
+import { AnalysisResult, CompanyProfile, Quote } from '../types';
 
 export const stocksRouter = Router();
 
@@ -14,6 +15,15 @@ const RANGE_TO_DAYS: Record<string, number> = {
   '3M': 66,
   '6M': 132,
   '1Y': 260,
+};
+
+const FALLBACK_ANALYSIS: Omit<AnalysisResult, 'symbol'> = {
+  signal: 'NOT_ENOUGH_INFO',
+  score: null,
+  confidence: null,
+  reasons: [],
+  advanced: { components: [], totalScore: null, bullishThreshold: 15, bearishThreshold: -15 },
+  generatedAt: Date.now(),
 };
 
 function requireSymbol(req: { params: { symbol?: string } }, res: import('express').Response): string | null {
@@ -30,22 +40,60 @@ function finnhubIsHealthy(): boolean {
   return status ? status.ok : true;
 }
 
+interface StockSummary {
+  symbol: string;
+  quote: Quote | null;
+  profile: CompanyProfile | null;
+  unavailable: string | null;
+}
+
+async function getStockSummary(symbol: string): Promise<StockSummary> {
+  if (!isFinnhubConfigured()) {
+    return { symbol, quote: null, profile: null, unavailable: 'provider_not_configured' };
+  }
+  const [quote, profile] = await Promise.all([getQuoteCached(symbol), getProfileCached(symbol)]);
+  if (!quote) {
+    const unavailable = finnhubIsHealthy() ? 'not_found' : 'provider_error';
+    return { symbol, quote: null, profile: profile || null, unavailable };
+  }
+  return { symbol, quote, profile: profile || null, unavailable: null };
+}
+
+async function getAnalysisOrFallback(symbol: string): Promise<AnalysisResult & { unavailable: string | null }> {
+  if (!isFinnhubConfigured()) {
+    return { symbol, ...FALLBACK_ANALYSIS, generatedAt: Date.now(), unavailable: 'provider_not_configured' };
+  }
+  try {
+    const result = await analyzeStock(symbol);
+    return { ...result, unavailable: null };
+  } catch {
+    return { symbol, ...FALLBACK_ANALYSIS, generatedAt: Date.now(), unavailable: 'provider_error' };
+  }
+}
+
+// Batch endpoint for the watchlist view: fetching quote + profile + analysis
+// for N symbols in one request (instead of 2N separate requests from the
+// browser) keeps polling a reasonably sized watchlist well within both our
+// own rate limiter and Finnhub's free-tier limit. Must be registered before
+// "/:symbol" or Express would treat "batch" as a ticker.
+stocksRouter.get('/batch', async (req, res) => {
+  const rawSymbols = typeof req.query.symbols === 'string' ? req.query.symbols.split(',') : [];
+  const symbols = sanitizeSymbolList(rawSymbols, 50);
+  if (symbols.length === 0) return res.json({ results: [] });
+
+  const results = await Promise.all(
+    symbols.map(async (symbol) => {
+      const [summary, analysis] = await Promise.all([getStockSummary(symbol), getAnalysisOrFallback(symbol)]);
+      return { ...summary, analysis };
+    }),
+  );
+  res.json({ results });
+});
+
 stocksRouter.get('/:symbol', async (req, res) => {
   const symbol = requireSymbol(req, res);
   if (!symbol) return;
-
-  if (!isFinnhubConfigured()) {
-    return res.json({ symbol, quote: null, profile: null, unavailable: 'provider_not_configured' });
-  }
-
-  const [quote, profile] = await Promise.all([getQuoteCached(symbol), getProfileCached(symbol)]);
-
-  if (!quote) {
-    const unavailable = finnhubIsHealthy() ? 'not_found' : 'provider_error';
-    return res.json({ symbol, quote: null, profile: profile || null, unavailable });
-  }
-
-  res.json({ symbol, quote, profile: profile || null, unavailable: null });
+  res.json(await getStockSummary(symbol));
 });
 
 stocksRouter.get('/:symbol/candles', async (req, res) => {
@@ -88,33 +136,5 @@ stocksRouter.get('/:symbol/news', async (req, res) => {
 stocksRouter.get('/:symbol/analysis', async (req, res) => {
   const symbol = requireSymbol(req, res);
   if (!symbol) return;
-
-  if (!isFinnhubConfigured()) {
-    return res.json({
-      symbol,
-      signal: 'NOT_ENOUGH_INFO',
-      score: null,
-      confidence: null,
-      reasons: [],
-      advanced: { components: [], totalScore: null, bullishThreshold: 15, bearishThreshold: -15 },
-      generatedAt: Date.now(),
-      unavailable: 'provider_not_configured',
-    });
-  }
-
-  try {
-    const result = await analyzeStock(symbol);
-    res.json({ ...result, unavailable: null });
-  } catch {
-    res.status(200).json({
-      symbol,
-      signal: 'NOT_ENOUGH_INFO',
-      score: null,
-      confidence: null,
-      reasons: [],
-      advanced: { components: [], totalScore: null, bullishThreshold: 15, bearishThreshold: -15 },
-      generatedAt: Date.now(),
-      unavailable: 'provider_error',
-    });
-  }
+  res.json(await getAnalysisOrFallback(symbol));
 });
